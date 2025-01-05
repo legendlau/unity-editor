@@ -4,7 +4,7 @@ using UnityEditor;
 namespace EditorTeaching
 {
     // The component that will be edited in the scene
-    public class SceneGUITarget : MonoBehaviour
+    public class HandlesGUITarget : MonoBehaviour
     {
         // Basic Transform Controls
         public Vector3 customPosition;
@@ -23,21 +23,44 @@ namespace EditorTeaching
         public float coneRange = 5f;
         public Vector2 rectangleSize = new Vector2(2f, 3f);
 
+        // New Controls for Additional Handles Features
+        [Header("Additional Handle Controls")]
+        public float sliderValue = 0f;
+        public Vector3 bezierStart = Vector3.zero;
+        public Vector3 bezierEnd = Vector3.forward * 5f;
+        public Vector3 bezierStartTangent = Vector3.up * 2f;
+        public Vector3 bezierEndTangent = Vector3.up * 2f;
+        public float arcRadius = 3f;
+        public float arcAngle = 90f;
+        public Vector3 customSnapValue = new Vector3(1f, 1f, 1f);
+        public Camera customCamera;
+        public Light customLight;
+
         // Drawing Options
         public bool showBasicHandles = true;
         public bool showShapeHandles = true;
         public bool showAdvancedHandles = true;
         public bool showMeasurements = true;
+        public bool showBezierHandles = true;
+        public bool showLightHandles = true;
+        public bool showCameraHandles = true;
+        public bool showCustomCapHandles = true;
+
+        // Visual Settings
+        public Color bezierColor = Color.cyan;
+        public Color arcColor = Color.magenta;
+        public float handleSize = 0.1f;
     }
 
     // The custom editor with scene GUI functionality
-    [CustomEditor(typeof(SceneGUITarget))]
-    public class SceneGUIExample : Editor
+    [CustomEditor(typeof(HandlesGUITarget))]
+    public class CustomHandlesExample : Editor
     {
         private const float handleSize = 0.5f;
         private GUIStyle labelStyle;
         private bool isRotating = false;
         private Quaternion initialRotation;
+        private Vector3 snapSettings = Vector3.one;
 
         private void OnEnable()
         {
@@ -46,6 +69,9 @@ namespace EditorTeaching
             labelStyle.alignment = TextAnchor.MiddleCenter;
             labelStyle.fontSize = 12;
             labelStyle.fontStyle = FontStyle.Bold;
+
+            // 设置默认的网格吸附值
+            snapSettings = EditorSnapSettings.move;
         }
 
         public override void OnInspectorGUI()
@@ -64,7 +90,7 @@ namespace EditorTeaching
                 "   - Free Move\n" +
                 "   - Custom Measurements\n" +
                 "   - Direction Indicators",
-                MessageType.Info);
+                UnityEditor.MessageType.Info);
 
             SerializedObject so = new SerializedObject(target);
             EditorGUI.BeginChangeCheck();
@@ -92,8 +118,23 @@ namespace EditorTeaching
 
         private void OnSceneGUI()
         {
-            SceneGUITarget target = (SceneGUITarget)this.target;
+            var target = (HandlesGUITarget)this.target;
+
+            // Draw help text in scene view
+            Handles.BeginGUI();
+            GUILayout.BeginArea(new Rect(10, 10, 200, 100));
+            EditorGUILayout.HelpBox(
+                "Click and drag handles to modify values",
+                UnityEditor.MessageType.Info
+            );
+            GUILayout.EndArea();
+            Handles.EndGUI();
+
             Transform transform = target.transform;
+
+            // 设置手柄大小
+            HandleUtility.handleMaterial.SetPass(0);
+            HandleUtility.GetHandleSize(target.customPosition);
 
             if (target.showBasicHandles)
             {
@@ -110,13 +151,43 @@ namespace EditorTeaching
                 DrawAdvancedHandles(target, transform);
             }
 
+            if (target.showBezierHandles)
+            {
+                DrawBezierHandles(target);
+            }
+
+            if (target.showLightHandles)
+            {
+                DrawLightHandles(target);
+            }
+
+            if (target.showCameraHandles)
+            {
+                DrawCameraHandles(target);
+            }
+
+            if (target.showCustomCapHandles)
+            {
+                DrawCustomCapHandles(target);
+            }
+
             if (target.showMeasurements)
             {
                 DrawMeasurements(target, transform);
             }
+
+            // 处理键盘事件
+            HandleKeyboardEvents(target);
+
+            // 确保场景视图更新
+            if (GUI.changed)
+            {
+                EditorUtility.SetDirty(target);
+                SceneView.RepaintAll();
+            }
         }
 
-        private void DrawBasicTransformHandles(SceneGUITarget target)
+        private void DrawBasicTransformHandles(HandlesGUITarget target)
         {
             // Position Handle
             EditorGUI.BeginChangeCheck();
@@ -146,7 +217,7 @@ namespace EditorTeaching
             }
         }
 
-        private void DrawShapeHandles(SceneGUITarget target, Transform transform)
+        private void DrawShapeHandles(HandlesGUITarget target, Transform transform)
         {
             // Wire Sphere
             Handles.color = target.areaColor;
@@ -190,7 +261,7 @@ namespace EditorTeaching
             }
         }
 
-        private void DrawAdvancedHandles(SceneGUITarget target, Transform transform)
+        private void DrawAdvancedHandles(HandlesGUITarget target, Transform transform)
         {
             // Free Move Handle
             EditorGUI.BeginChangeCheck();
@@ -233,7 +304,7 @@ namespace EditorTeaching
             }
         }
 
-        private void DrawMeasurements(SceneGUITarget target, Transform transform)
+        private void DrawMeasurements(HandlesGUITarget target, Transform transform)
         {
             // Draw measurements and labels
             Handles.color = Color.white;
@@ -285,18 +356,198 @@ namespace EditorTeaching
                 Handles.Label(pos, labels[i], labelStyle);
             }
         }
+
+        private void DrawBezierHandles(HandlesGUITarget target)
+        {
+            Handles.color = target.bezierColor;
+
+            // 绘制贝塞尔曲线
+            Handles.DrawBezier(
+                target.customPosition + target.bezierStart,
+                target.customPosition + target.bezierEnd,
+                target.customPosition + target.bezierStart + target.bezierStartTangent,
+                target.customPosition + target.bezierEnd + target.bezierEndTangent,
+                target.bezierColor,
+                null,
+                2f
+            );
+
+            // 控制点手柄
+            EditorGUI.BeginChangeCheck();
+            Vector3 newStart = Handles.PositionHandle(target.customPosition + target.bezierStart, Quaternion.identity) - target.customPosition;
+            Vector3 newEnd = Handles.PositionHandle(target.customPosition + target.bezierEnd, Quaternion.identity) - target.customPosition;
+            Vector3 newStartTangent = Handles.PositionHandle(target.customPosition + target.bezierStart + target.bezierStartTangent, Quaternion.identity)
+                                    - (target.customPosition + target.bezierStart);
+            Vector3 newEndTangent = Handles.PositionHandle(target.customPosition + target.bezierEnd + target.bezierEndTangent, Quaternion.identity)
+                                  - (target.customPosition + target.bezierEnd);
+
+            if (EditorGUI.EndChangeCheck())
+            {
+                Undo.RecordObject(target, "Modified Bezier Curve");
+                target.bezierStart = newStart;
+                target.bezierEnd = newEnd;
+                target.bezierStartTangent = newStartTangent;
+                target.bezierEndTangent = newEndTangent;
+            }
+
+            // 绘制控制点连线
+            Handles.color = Color.white;
+            Handles.DrawDottedLine(
+                target.customPosition + target.bezierStart,
+                target.customPosition + target.bezierStart + target.bezierStartTangent,
+                2f
+            );
+            Handles.DrawDottedLine(
+                target.customPosition + target.bezierEnd,
+                target.customPosition + target.bezierEnd + target.bezierEndTangent,
+                2f
+            );
+        }
+
+        private void DrawLightHandles(HandlesGUITarget target)
+        {
+            if (target.customLight != null)
+            {
+                // 绘制光源范围
+                Handles.color = Color.yellow;
+                switch (target.customLight.type)
+                {
+                    case LightType.Spot:
+                        Handles.DrawWireDisc(target.customLight.transform.position, target.customLight.transform.forward,
+                            target.customLight.range * Mathf.Tan(target.customLight.spotAngle * Mathf.Deg2Rad * 0.5f));
+                        break;
+                    case LightType.Point:
+                        Handles.DrawWireDisc(target.customLight.transform.position, Vector3.up, target.customLight.range);
+                        Handles.DrawWireDisc(target.customLight.transform.position, Vector3.right, target.customLight.range);
+                        Handles.DrawWireDisc(target.customLight.transform.position, Vector3.forward, target.customLight.range);
+                        break;
+                }
+
+                // 光源强度滑块
+                Handles.color = Color.white;
+                EditorGUI.BeginChangeCheck();
+                float newIntensity = Handles.ScaleSlider(
+                    target.customLight.intensity,
+                    target.customLight.transform.position,
+                    target.customLight.transform.forward,
+                    Quaternion.identity,
+                    3f,
+                    0.1f
+                );
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(target.customLight, "Change Light Intensity");
+                    target.customLight.intensity = newIntensity;
+                }
+            }
+        }
+
+        private void DrawCameraHandles(HandlesGUITarget target)
+        {
+            if (target.customCamera != null)
+            {
+                // 绘制相机视锥体
+                Handles.color = Color.white;
+                Matrix4x4 matrix = Matrix4x4.TRS(
+                    target.customCamera.transform.position,
+                    target.customCamera.transform.rotation,
+                    Vector3.one
+                );
+                Handles.zTest = UnityEngine.Rendering.CompareFunction.LessEqual;
+                Handles.DrawCamera(new Rect(0, 0, 1, 1), target.customCamera);
+
+                // 相机视野角度控制
+                EditorGUI.BeginChangeCheck();
+                float newFOV = Handles.ScaleSlider(
+                    target.customCamera.fieldOfView,
+                    target.customCamera.transform.position,
+                    target.customCamera.transform.up,
+                    Quaternion.identity,
+                    3f,
+                    0.1f
+                );
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(target.customCamera, "Change Camera FOV");
+                    target.customCamera.fieldOfView = newFOV;
+                }
+            }
+        }
+
+        private void DrawCustomCapHandles(HandlesGUITarget target)
+        {
+            // 演示不同的手柄样式
+            float size = HandleUtility.GetHandleSize(target.customPosition) * target.handleSize;
+            Vector3 position = target.customPosition + Vector3.up * 2f;
+
+            // 球形手柄
+            Handles.color = Color.white;
+            if (Handles.Button(position, Quaternion.identity, size, size, Handles.SphereHandleCap))
+            {
+                Debug.Log("Sphere Handle Clicked!");
+            }
+
+            // 立方体手柄
+            position += Vector3.right * 2f;
+            if (Handles.Button(position, Quaternion.identity, size, size, Handles.CubeHandleCap))
+            {
+                Debug.Log("Cube Handle Clicked!");
+            }
+
+            // 圆锥手柄
+            position += Vector3.right * 2f;
+            if (Handles.Button(position, Quaternion.identity, size, size, Handles.ConeHandleCap))
+            {
+                Debug.Log("Cone Handle Clicked!");
+            }
+
+            // 圆柱手柄
+            position += Vector3.right * 2f;
+            if (Handles.Button(position, Quaternion.identity, size, size, Handles.CylinderHandleCap))
+            {
+                Debug.Log("Cylinder Handle Clicked!");
+            }
+
+            // 绘制自定义手柄标签
+            Handles.Label(position + Vector3.up, "Custom Handles", labelStyle);
+        }
+
+        private void HandleKeyboardEvents(HandlesGUITarget target)
+        {
+            Event e = Event.current;
+            if (e.type == EventType.KeyDown)
+            {
+                switch (e.keyCode)
+                {
+                    case KeyCode.G:
+                        // 切换网格吸附
+                        EditorSnapSettings.move = EditorSnapSettings.move == Vector3.zero ? snapSettings : Vector3.zero;
+                        e.Use();
+                        break;
+                    case KeyCode.R:
+                        // 开始/结束旋转模式
+                        isRotating = !isRotating;
+                        if (isRotating)
+                        {
+                            initialRotation = target.customRotation;
+                        }
+                        e.Use();
+                        break;
+                }
+            }
+        }
     }
 
     // Add menu item to create the component
-    public class SceneGUIExampleMenu
+    public class HandlesGUIExampleMenu
     {
-        [MenuItem("Editor/Teaching/Scene GUI Example")]
-        static void CreateSceneGUIExample()
+        [MenuItem("Editor/Handles GUI Example")]
+        static void CreateHandlesGUIExample()
         {
-            GameObject go = new GameObject("Scene GUI Example");
-            go.AddComponent<SceneGUITarget>();
+            GameObject go = new GameObject("Handles GUI Example");
+            go.AddComponent<HandlesGUITarget>();
             Selection.activeGameObject = go;
-            Undo.RegisterCreatedObjectUndo(go, "Create Scene GUI Example");
+            Undo.RegisterCreatedObjectUndo(go, "Create Handles GUI Example");
         }
     }
 }
