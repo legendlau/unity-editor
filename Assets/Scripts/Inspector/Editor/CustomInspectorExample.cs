@@ -1,20 +1,14 @@
 using UnityEngine;
 using UnityEditor;
+using EditorTeaching.Inspector;
 
-namespace EditorTeaching
+namespace EditorTeaching.Inspector
 {
-    // This is the component we want to customize
-    public class CustomInspectorTarget : MonoBehaviour
-    {
-        public string playerName = "Player";
-        public int health = 100;
-        public float moveSpeed = 5f;
-        [SerializeField] private bool isInvincible;
-    }
-
-    // This is the custom inspector
+    /// <summary>
+    /// CustomInspectorTarget 的自定义检查器
+    /// </summary>
     [CustomEditor(typeof(CustomInspectorTarget))]
-    public class CustomInspectorExample : Editor
+    public class CustomInspectorExample : UnityEditor.Editor
     {
         private bool showAdvancedSettings = false;
         private bool showDebugSettings = false;
